@@ -124,9 +124,13 @@ TEMPLATES = [
 WSGI_APPLICATION = 'home.wsgi.application'
 
 
+# Check if running in a local development environment
+IS_LOCAL = not any(host in config('HOST', default='localhost') for host in ['.railway.app'])
+
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# Default to SQLite for local development
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -134,18 +138,65 @@ DATABASES = {
     }
 }
 
+# Use Railway PostgreSQL in production
 DATABASE_URL = config('DATABASE_URL', cast=str, default=None)
-if DATABASE_URL:
+if DATABASE_URL and not IS_LOCAL:
     import dj_database_url
+    # Parse the database URL first
+    db_config = dj_database_url.parse(DATABASE_URL)
+    
+    # Then add the geventpool specific settings
+    db_config.update({
+        'ENGINE': 'django_db_geventpool.backends.postgresql_psycopg3',  # Corrected engine for psycopg3
+        'OPTIONS': {
+            'MAX_CONNS': 20,  # Increased max connections for better performance
+            'REUSE_CONNS': 10,  # Number of connections to keep open and reuse
+        },
+        'CONN_MAX_AGE': 0,  # Django's connection age must be 0 when using geventpool
+        'CONN_HEALTH_CHECKS': True,  # Enable connection health checks
+    })
+    
     DATABASES = {
-        'default': dj_database_url.config(
-            default=DATABASE_URL, 
-            conn_max_age=600, 
-            ssl_require=True,
-            conn_health_checks=True
-        )
+        'default': db_config
     }
 
+# Redis cache configuration - using environment variables
+REDIS_URL = config('REDIS_URL', cast=str, default=None)
+
+if REDIS_URL and not IS_LOCAL:
+    # If REDIS_URL is provided and not in local development, use Redis
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "SOCKET_CONNECT_TIMEOUT": 5,  # seconds
+                "SOCKET_TIMEOUT": 5,  # seconds
+                "CONNECTION_POOL_KWARGS": {"max_connections": 50},
+                "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
+                "IGNORE_EXCEPTIONS": True,  # Django will handle the cache failure gracefully
+            },
+            "KEY_PREFIX": "django_sk_backend"  # Add a prefix to avoid key collisions
+        }
+    }
+    
+    # Use Redis for session storage
+    SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+    SESSION_CACHE_ALIAS = "default"
+    
+    # Cache time to live is 15 minutes (in seconds)
+    CACHE_TTL = 60 * 15
+else:
+    # Fallback to local memory cache for development
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",
+        }
+    }
+    
+    SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
