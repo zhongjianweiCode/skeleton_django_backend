@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CORS Test</title>
+</head>
+<body>
+    <h1>CORS Test</h1>
+    <button id="testCors">Test CORS</button>
+    <button id="testRegister">Test Register</button>
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('testCors').addEventListener('click', async () => {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/test-cors/', {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('result').innerText = JSON.stringify(data);
+            } catch (error) {
+                document.getElementById('result').innerText = 'Error: ' + error.message;
+                console.error('CORS Test Error:', error);
+            }
+        });
+
+        document.getElementById('testRegister').addEventListener('click', async () => {
+            try {
+                const userData = {
+                    email: "test@example.com",
+                    password: "Password123!",
+                    confirm_password: "Password123!"
+                };
+                
+                const response = await fetch('http://127.0.0.1:8000/api/auth/register/', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(userData)
+                });
+                
+                const data = await response.json();
+                document.getElementById('result').innerText = JSON.stringify(data);
+            } catch (error) {
+                document.getElementById('result').innerText = 'Error: ' + error.message;
+                console.error('Register Error:', error);
+            }
+        });
+    </script>
+</body>
+</html> 
